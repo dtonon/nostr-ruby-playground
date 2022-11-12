@@ -1,4 +1,5 @@
 # Private chat with another user
+# Usage: ruby 07-private-chat.rb [pubkey]
 
 require 'highline/import'
 require 'schnorr'
@@ -36,7 +37,7 @@ relay_host = "wss://relay.damus.io" # 'wss://nostr-relay.wlvs.space' - 'ws://127
 
 def subscription_request
   ["REQ", SecureRandom.random_number.to_s,
-    { "kind": 4, "#p": [$test_pub_key, $recipient_pub_key], "since": (Time.now.utc - 60*60*24).to_i }
+    { "kinds": [4], "#p": [$test_pub_key, $recipient_pub_key], "since": (Time.now.utc - 60*60*24).to_i }
   ].to_json
 end
 
