@@ -16,5 +16,7 @@ A series of simple progressive Ruby scripts to learn how to interact with the [N
 
 07. Let's chat with another user!
 
+08. Be alerted for new content or private messages
+
 The scripts contain a test key pair, feel free to update it to test.
 To experimenting with events creation is suggested to use a local relay, you can find many implementations at [awensome-nostr](https://github.com/aljazceru/awesome-nostr).
