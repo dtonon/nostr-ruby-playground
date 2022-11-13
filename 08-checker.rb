@@ -5,7 +5,8 @@ require 'highline/import'
 require 'schnorr'
 require 'json'
 require "base64"
-require 'websocket-client-simple'
+require 'faye/websocket'
+require 'eventmachine'
 
 PINS = {
   "private": "⬛️", "0": "🟨", "1": "🟧", "2": "🟥", "3": "🟫", "4": "🟦", "5": "🟪", "6": "⬜️"
@@ -94,44 +95,45 @@ def notify_if_interesting(event, keywords_data, recipients_data)
   $last_event = Time.now
 end
 
-ws = WebSocket::Client::Simple.connect relay_host
+EM.run {
 
-ws.on :message do |msg|
-  if !msg.data.empty?
-    begin
-      event = JSON.parse(msg.data)
 
-      if event[0] == "EVENT" && [1, 4, 42].include?(event[2]["kind"])
-        notify_if_interesting(event, keywords_data, recipients_data)
+  ws = Faye::WebSocket::Client.new(relay_host, nil, {ping: 60})
+
+  ws.on :open do |event|
+    sr = subscription_keywords()
+    ws.send sr
+    sr = subscription_private(recipients_data)
+    ws.send sr if sr
+    puts "\n🟩 Ready to find new content!"
+    puts "\nSearching for keywords:"
+    keywords_data.each_with_index { |k, index| puts "#{PINS[index.to_s.to_sym]} #{k}"}
+    puts "\nAnd direct messages to:"
+    puts recipients_data.map{|r| "#{PINS[:private]} #{r}\n"}
+  end
+
+  ws.on :message do |msg|
+    if !msg.data.empty?
+      begin
+        event = JSON.parse(msg.data)
+        # puts "---------- Event -----------------\n#{event.inspect}\n\n"
+        if event[0] == "EVENT" && [1, 4, 42].include?(event[2]["kind"])
+          notify_if_interesting(event, keywords_data, recipients_data)
+        end
+      rescue JSON::ParserError
+        return "🟥 " + msg.data.inspect + "\n\n"
       end
-
-      # puts "---------- Event -----------------\n#{event.inspect}\n\n"
-      
-    rescue JSON::ParserError
-      return "🟥 " + msg.data.inspect + "\n\n"
     end
   end
 
-end
+  ws.on :error do |event|
+    p [:error, event]
+  end
 
-ws.on :open do
-  sr = subscription_request(recipients_data)
-  ws.send sr
-  puts "\n🟩 Ready to find new content!"
-  puts "\nSearching for keywords:"
-  keywords_data.each_with_index { |k, index| puts "#{PINS[index.to_s.to_sym]} #{k}"}
-  puts "\nAnd direct messages to:"
-  puts recipients_data.map{|r| "#{PINS[:private]} #{r}\n"}
-end
-
-ws.on :close do |e|
-  p e
-  exit 1
-end
-
-ws.on :error do |e|
-  p e
-end
-
-loop do
-end
+  ws.on :close do |event|
+    p [:close, event.code, event.reason]
+    puts "🟥 Reconnecting..."
+    ws = Faye::WebSocket::Client.new(relay_host, nil, {ping: 60})
+  end
+  
+}
