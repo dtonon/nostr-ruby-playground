@@ -77,12 +77,12 @@ def notify_if_interesting(event, keywords_data, recipients_data)
   when :keyword
     puts "\n\n#{pin} " + event[2]["content"].strip
     puts "> Event ID #{event[2]["id"]}"
-    puts "> From #{event[2]["pubkey"]} at #{Time.at(event[2]["created_at"])}"
+    puts "> From #{event[2]["pubkey"]}"
     puts "> At #{Time.at(event[2]["created_at"])}"
   when :recipient
     puts "\n\n#{pin} Private message"
     puts "> Event ID #{event[2]["id"]}"
-    puts "> From #{event[2]["pubkey"]} at #{Time.at(event[2]["created_at"])}"
+    puts "> From #{event[2]["pubkey"]}"
     puts "> To #{event_recipients.join(", ")}"
     puts "> At #{Time.at(event[2]["created_at"])}"
   end
