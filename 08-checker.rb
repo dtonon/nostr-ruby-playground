@@ -39,14 +39,18 @@ end
 
 relay_host = "wss://relay.damus.io" # 'wss://nostr-relay.wlvs.space' - 'ws://127.0.0.1'
 
-def subscription_request(recipients_data)
-  request = ["REQ", SecureRandom.random_number.to_s]
-  request << { "kinds": [1, 42], "since": (Time.now.utc - 60*60*$hours_history).to_i  }
+def subscription_keywords()
+  request = ["REQ", SecureRandom.random_number.to_s,
+    { "kinds": [1, 42], "since": (Time.now.utc - 60*60*$hours_history).to_i  }
+  ].to_json
+end
 
+def subscription_private(recipients_data)
   if recipients_data.any?
-    request << { "kinds": [4], "#p": recipients_data, "since": (Time.now.utc - 60*60*$hours_history).to_i  }
+    request = ["REQ", SecureRandom.random_number.to_s,
+      { "kinds": [4], "#p": recipients_data, "since": (Time.now.utc - 60*60*$hours_history).to_i, "limit": 1 }
+    ].to_json
   end
-  request.to_json
 end
 
 $last_event = Time.now
