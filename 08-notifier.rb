@@ -39,16 +39,18 @@ end
 
 relay_host = "wss://relay.damus.io" # 'wss://nostr-relay.wlvs.space' - 'ws://127.0.0.1'
 
-def subscription_keywords()
-  request = ["REQ", SecureRandom.random_number.to_s,
-    { "kinds": [1, 42], "since": (Time.now.utc - 60*60*$hours_history).to_i  }
+def subscription_keywords(ignore_history = false)
+  since = (ignore_history ? Time.now.utc : Time.now.utc - 60*60*$hours_history)
+  debug = request = ["REQ", SecureRandom.random_number.to_s,
+    { "kinds": [1, 42], "since": since.to_i  }
   ].to_json
 end
 
-def subscription_private(recipients_data)
+def subscription_private(recipients_data, ignore_history = false)
   if recipients_data.any?
-    request = ["REQ", SecureRandom.random_number.to_s,
-      { "kinds": [4], "#p": recipients_data, "since": (Time.now.utc - 60*60*$hours_history).to_i, "limit": 1 }
+    since = (ignore_history ? Time.now.utc : Time.now.utc - 60*60*$hours_history)
+    debug = request = ["REQ", SecureRandom.random_number.to_s,
+      { "kinds": [4], "#p": recipients_data, "since": since.to_i, "limit": 1 }
     ].to_json
   end
 end
@@ -99,15 +101,14 @@ def notify_if_interesting(event, keywords_data, recipients_data)
   $last_event = Time.now
 end
 
-EM.run {
-
+def relay_connect(relay_host, keywords_data, recipients_data, ignore_history = false)
 
   ws = Faye::WebSocket::Client.new(relay_host, nil, {ping: 60})
 
   ws.on :open do |event|
-    sr = subscription_keywords()
+    sr = subscription_keywords(ignore_history)
     ws.send sr
-    sr = subscription_private(recipients_data)
+    sr = subscription_private(recipients_data, ignore_history)
     ws.send sr if sr
     puts "\n🟩 Ready to find new content!"
     puts "\nSearching for keywords:"
@@ -131,13 +132,19 @@ EM.run {
   end
 
   ws.on :error do |event|
-    p [:error, event]
+    # p [:error, event]
   end
 
   ws.on :close do |event|
-    p [:close, event.code, event.reason]
+    # p [:close, event.code, event.reason]
     puts "🟥 Reconnecting..."
-    ws = Faye::WebSocket::Client.new(relay_host, nil, {ping: 60})
+    sleep(5)
+    relay_connect(relay_host, keywords_data, recipients_data, true)
   end
+end
+
+EM.run {
+
+  relay_connect(relay_host, keywords_data, recipients_data)
   
 }
