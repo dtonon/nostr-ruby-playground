@@ -5,7 +5,8 @@ require 'highline/import'
 require 'schnorr'
 require 'json'
 require "base64"
-require 'websocket-client-simple'
+require 'faye/websocket'
+require 'eventmachine'
 
 if ARGV[0]
   $recipient_pub_key = ARGV[0]
@@ -113,55 +114,70 @@ def build_event(message)
   return ["EVENT", event].to_json
 end
 
-ws = WebSocket::Client::Simple.connect relay_host
+def relay_connect(relay_host)
 
-ws.on :message do |msg|
-  if !msg.data.empty?
-    begin
-      event = JSON.parse(msg.data)
-      # puts "---------- Event -----------------\n#{event.inspect}\n\n"
-      if event[0] == "EVENT" && event[2]["kind"] == 4
-        if event[2]["pubkey"] == $recipient_pub_key || (event[2]["pubkey"] == $test_pub_key && 
-          Time.now.to_i - event[2]["created_at"] > 3) # Hack -> Skip the just sent message to avoid a duplicate in the timeline
-          output = decrypt_event(event)
-          prev = (event[2]["pubkey"] == $recipient_pub_key) ? "🟠 " : "⚫️ "
-          puts prev + output + "\n\n" if output && !output.empty?
+  ws = Faye::WebSocket::Client.new(relay_host, nil, {ping: 60})
+  sid = nil
+
+  ws.on :message do |e|
+    if !e.data.empty?
+      begin
+        event = JSON.parse(e.data)
+        # puts "---------- Event -----------------\n#{e.inspect}\n\n"
+        if event[0] == "EVENT" && event[2]["kind"] == 4
+          if event[2]["pubkey"] == $recipient_pub_key || (event[2]["pubkey"] == $test_pub_key && 
+            Time.now.to_i - event[2]["created_at"] > 3) # Hack -> Skip the just sent message to avoid a duplicate in the timeline
+            output = decrypt_event(event)
+            prev = (event[2]["pubkey"] == $recipient_pub_key) ? "🟠 " : "⚫️ "
+            puts prev + output + "\n\n" if output && !output.empty?
+          end
+        elsif event[0] == "EVENT" && event[2]["kind"] == 0
+          puts "🟪 Meta: " + event.inspect + "\n\n"
+        elsif event[0] == "EOSE"
+          # End Of Stored Event notice
+          puts "🟩 Ready to chat!\n\n"
+        elsif event[0] == "REQ"
+          # Subscription to events
+          puts "⬜️ Subscription: " + event.inspect + "\n\n"
+        elsif event[0] == "NOTICE"
+          # Subscription to events
+          puts "🟨 " + event[1] + "\n\n"
+        else
+          # puts "⬜️ " + event.inspect + "\n\n"
         end
-      elsif event[0] == "EVENT" && event[2]["kind"] == 0
-        puts "🟪 Meta: " + event.inspect + "\n\n"
-      elsif event[0] == "EOSE"
-        # End Of Stored Event notice
-        puts "🟩 Ready to chat!\n\n"
-      elsif event[0] == "REQ"
-        # Subscription to events
-        puts "⬜️ Subscription: " + event.inspect + "\n\n"
-      elsif event[0] == "NOTICE"
-        # Subscription to events
-        puts "🟨 " + event[1] + "\n\n"
-      else
-        # puts "⬜️ " + event.inspect + "\n\n"
+      rescue JSON::ParserError
+        return "🟥 " + e.data.inspect + "\n\n"
       end
-    rescue JSON::ParserError
-      return "🟥 " + msg.data.inspect + "\n\n"
     end
+
+  end
+
+  ws.on :open do
+    ws.send subscription_request
+    sid = @channel.subscribe { |msg| ws.send build_event(msg) }
+  end
+
+  ws.on :close do |e|
+    puts "🟥 Reconnecting..."
+    sleep(5)
+    @channel.unsubscribe(sid)
+    relay_connect(relay_host)
+  end
+
+  ws.on :error do |e|
+    # puts "Error => #{e.inspect}"
   end
 
 end
 
-ws.on :open do
-  ws.send subscription_request
-end
+EM.run {
+  @channel = EM::Channel.new
 
-ws.on :close do |e|
-  p e
-  exit 1
-end
+  Thread.new {
+    loop do
+      @channel.push STDIN.gets.strip
+    end
+  }
 
-ws.on :error do |e|
-  p e
-end
-
-loop do
-  ws.send build_event(STDIN.gets.strip)
-  puts "\n"
-end
+  relay_connect(relay_host)
+}
