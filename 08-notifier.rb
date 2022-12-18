@@ -103,7 +103,7 @@ end
 
 def relay_connect(relay_host, keywords_data, recipients_data, ignore_history = false)
 
-  ws = Faye::WebSocket::Client.new(relay_host, nil, {ping: 60})
+  ws = Faye::WebSocket::Client.new(relay_host, [], {ping: 60, :tls => {:verify_peer => false}})
 
   ws.on :open do |event|
     sr = subscription_keywords(ignore_history)

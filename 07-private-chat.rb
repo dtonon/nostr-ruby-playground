@@ -116,7 +116,7 @@ end
 
 def relay_connect(relay_host)
 
-  ws = Faye::WebSocket::Client.new(relay_host, nil, {ping: 60})
+  ws = Faye::WebSocket::Client.new(relay_host, nil, {ping: 60, :tls => {:verify_peer => false}})
   sid = nil
 
   ws.on :message do |e|
